@@ -217,7 +217,8 @@
     button.disabled = true;
     say('読み込んでいます…', false);
 
-    return fetch('site.bin')
+    // 更新がすぐ見えるよう、毎回最新のデータを取りに行く（ブラウザの保存を使わない）
+    return fetch('site.bin?v=' + Date.now(), { cache: 'no-store' })
       .then(function (res) {
         if (!res.ok) throw new Error('fetch-failed');
         return res.arrayBuffer();
