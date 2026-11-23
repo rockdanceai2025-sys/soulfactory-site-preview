@@ -205,12 +205,64 @@
     return files;
   }
 
-  function render(files) {
-    return files['index.html'].text().then(function (html) {
+  // 複数ページの切り替え（トップ ⇄ 下層ページ）。リンク先が同梱のページならその場で表示する
+  var FILES = null;
+  var current = 'index.html';
+
+  function pageFor(href) {
+    var u;
+    try { u = new URL(href, 'https://preview.invalid/' + current); } catch (e) { return null; }
+    if (u.host !== 'preview.invalid') return null;
+    var name = u.pathname.replace(/^\//, '');
+    if (name === '' || /\/$/.test(name)) name += 'index.html';
+    return FILES[name] ? { name: name, hash: u.hash } : null;
+  }
+
+  function show(name, hash, push) {
+    return FILES[name].text().then(function (html) {
+      current = name;
       document.open();
       document.write(html);
       document.close();
+      if (push) { try { history.pushState({ page: name }, '', '#!/' + name.replace(/index\.html$/, '')); } catch (e) {} }
+      document.addEventListener('click', onClick, true);
+      window.addEventListener('popstate', onPop);
+      setTimeout(function () {
+        var el = hash && document.getElementById(decodeURIComponent(hash.slice(1)));
+        if (el) el.scrollIntoView(); else window.scrollTo(0, 0);
+      }, 50);
     });
+  }
+
+  function onClick(e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || a.target === '_blank') return;
+    var raw = a.getAttribute('href');
+    if (!raw || raw.charAt(0) === '#') return;           // 同じページ内の移動はそのまま
+    var t = pageFor(raw);
+    if (!t) return;                                      // 外部サイトなどはそのまま
+    e.preventDefault();
+    if (t.name === current) {
+      var el = t.hash && document.getElementById(t.hash.slice(1));
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+    show(t.name, t.hash, true);
+  }
+
+  // ページを書き換えると登録した動きが消えるため、表示のたびに付け直す
+  function onPop() {
+    if (!FILES) return;
+    var m = /^#!\/(.*)$/.exec(location.hash);
+    var name = m ? (m[1] === '' || /\/$/.test(m[1]) ? m[1] + 'index.html' : m[1]) : 'index.html';
+    if (FILES[name] && name !== current) show(name, '', false);
+  }
+
+  function render(files) {
+    FILES = files;
+    var m = /^#!\/(.*)$/.exec(location.hash);           // 再読み込みしたときは同じページを開く
+    var start = m ? (m[1] === '' || /\/$/.test(m[1]) ? m[1] + 'index.html' : m[1]) : 'index.html';
+    return show(FILES[start] ? start : 'index.html', '', false);
   }
 
   function unlock(password, isAuto) {
